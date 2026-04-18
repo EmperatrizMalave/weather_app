@@ -1,31 +1,66 @@
-import requests # 1. Importamos la librería que nos permite "hablar" con URLs de internet.
+import requests
+from urllib.parse import quote
 
-def get_coordinates(city_name): # 2. Definimos una función que recibe el nombre de la ciudad.
-    """Convierte el nombre de una ciudad en latitud y longitud."""
-    
-    # 3. Creamos la URL mágica. Usamos una "f-string" para meter el nombre de la ciudad dentro del link.
-    url = f"https://geocoding-api.open-meteo.com/v1/search?name={city_name}&count=1&language=es&format=json"
-    
-    response = requests.get(url) # 4. Enviamos la petición a la API. 'response' guarda lo que la API nos contesta.
-    data = response.json() # 5. Transformamos la respuesta (que es puro texto) en un diccionario de Python.
+# --- Almacén de caché con nombre profesional ---
+weather_cache = {}
 
-    if "results" in data: # 6. Verificamos: ¿La API encontró resultados para esa ciudad?
-        result = data["results"][0] # 7. Si sí, tomamos el primer resultado (el índice 0).
-        # 8. Devolvemos tres cosas: latitud, longitud y el nombre completo (ej: "Jalisco, México").
-        return result["latitude"], result["longitude"], result["name"]
-        
-    return None, None, None # 9. Si no encontró nada, devolvemos "vacío" para no romper el programa.
+def get_coordinates(city_name):
+    """Busca coordenadas y usa caché si ya existen."""
+    # Normalizamos la clave de búsqueda
+    cache_key = city_name.lower()
 
-def get_weather(lat, lon): # 10. Esta función recibe las coordenadas que obtuvimos arriba.
-    """Obtiene la temperatura actual usando coordenadas."""
+    # Revisamos si ya buscamos esta ciudad antes
+    if cache_key in weather_cache:
+        print(f"  [Caché] Recuperando coordenadas de {city_name}...")
+        data = weather_cache[cache_key]
+        return data["lat"], data["lon"], data["full_name"]
+
+    # Si no está en caché, preparamos la URL segura
+    safe_city_name = quote(city_name.strip())
+    url = f"https://geocoding-api.open-meteo.com/v1/search?name={safe_city_name}&count=1&language=es&format=json"
     
-    # 11. Nueva URL para el clima, inyectando la latitud y longitud.
+    try:
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        if "results" in data and len(data["results"]) > 0:
+            result = data["results"][0]
+            lat, lon, full_name = result["latitude"], result["longitude"], result["name"]
+            
+            # Guardamos en la caché global
+            weather_cache[cache_key] = {
+                "lat": lat, 
+                "lon": lon, 
+                "full_name": full_name,
+                "temp": None 
+            }
+            return lat, lon, full_name
+    except Exception as e:
+        print(f"Error técnico: {e}")
+    return None, None, None
+
+def get_weather(lat, lon, city_name): 
+    """Obtiene clima y actualiza la caché."""
+    cache_key = city_name.lower()
+    
+    # ¿Ya tenemos la temperatura en nuestra caché?
+    if cache_key in weather_cache and weather_cache[cache_key]["temp"] is not None:
+        print(f"  [Caché] Recuperando temperatura de {city_name}...")
+        return weather_cache[cache_key]["temp"]
+
+    # Si no, consultamos la API de pronóstico
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
     
-    response = requests.get(url) # 12. Otra petición a internet.
-    data = response.json() # 13. Convertimos a diccionario otra vez.
-    
-    if "current_weather" in data: # 14. ¿La respuesta tiene la sección de clima actual?
-        return data["current_weather"]["temperature"] # 15. Devolvemos solo el número de la temperatura.
+    try:
+        response = requests.get(url)
+        weather_data = response.json()
         
-    return None # 16. Si algo falló, devolvemos None.
+        if "current_weather" in weather_data:
+            temp = weather_data["current_weather"]["temperature"]
+            # Actualizamos el registro existente en caché
+            if cache_key in weather_cache:
+                weather_cache[cache_key]["temp"] = temp
+            return temp
+    except Exception as e:
+        print(f"Error al obtener clima: {e}")
+        
+    return None

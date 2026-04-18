@@ -1,31 +1,50 @@
-# 1. Traemos las funciones que escribimos en el otro archivo para poder usarlas aquí.
-from api_client import get_coordinates, get_weather 
+from api_client import get_coordinates, get_weather
 
-def run(): # 2. Definimos la función principal que arranca todo.
-    print("--- Bienvenido a tu App del Clima ---") # 3. Un saludo bonito en consola.
-    
-    # 4. Le pedimos al usuario que escriba algo y lo guardamos en la variable 'city'.
-    city = input("Escribe el nombre de una ciudad: ") 
-    
-    # 5. LLAMADA 1: Le pasamos el nombre a la función de coordenadas.
-    # Recibimos tres valores: latitud, longitud y el nombre oficial.
-    lat, lon, full_name = get_coordinates(city) 
-    
-    if lat and lon: # 6. ¿Obtuvimos coordenadas válidas? (Si no es None).
-        
-        # 7. LLAMADA 2: Si tenemos coordenadas, pedimos la temperatura.
-        temp = get_weather(lat, lon) 
-        
-        if temp is not None: # 8. ¿La temperatura llegó correctamente?
-            # 9. Mostramos el resultado final usando el nombre oficial y el número.
-            print(f"\nEl clima en {full_name} es de {temp}°C.") 
-        else:
-            print("No se pudo obtener el clima.")
-    else:
-        # 10. Si la primera función no encontró la ciudad, avisamos al usuario.
-        print("Ciudad no encontrada. Intenta de nuevo.")
+def is_valid_input(text):
+    """Valida que la entrada no sea solo números o esté vacía."""
+    if text.isdigit():
+        return False
+    if not text.strip():
+        return False
+    return True
 
-# 11. Esta línea es un estándar en Python. 
-# Dice: "Si este archivo se ejecuta directamente, corre la función run()".
+def run():
+    print("--- Weather Monitor System (Cache Enabled) ---")
+    
+    while True: 
+        print("\n" + "="*45)
+        user_input = input("Escribe ciudades (o 'exit' para terminar): ")
+        
+        if user_input.lower() in ['exit', 'salir', 'quit']:
+            print("Cerrando sistema... ¡Hasta luego!")
+            break
+        
+        # Procesamos la entrada convirtiéndola en una lista limpia
+        raw_cities = [c.strip() for c in user_input.split(",")]
+        
+        print("\nProcesando solicitudes...\n" + "-"*45)
+
+        for city in raw_cities:
+            # 1. Validación de calidad de datos
+            if not is_valid_input(city):
+                print(f"| {city:25} | Error: Formato inválido |") 
+                continue 
+
+            # 2. Obtención de ubicación
+            lat, lon, full_name = get_coordinates(city)
+            
+            if lat and lon:
+                # 3. Obtención de clima con soporte de caché
+                temperature = get_weather(lat, lon, city) 
+                
+                if temperature is not None:
+                    print(f"| {full_name:25} | {temperature:5}°C |")
+                else:
+                    print(f"| {city:25} | Error de clima |")
+            else:
+                print(f"| {city:25} | Ciudad no encontrada |")
+        
+        print("-" * 45)
+
 if __name__ == "__main__":
     run()
